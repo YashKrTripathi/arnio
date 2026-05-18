@@ -375,7 +375,7 @@ class TestReadCsv:
 
     def test_quoted_newline_record(self, tmp_path):
         csv_path = tmp_path / "quoted_newline.csv"
-        csv_path.write_text('id,text\n1,"hello\nworld"\n2,ok\n')
+        csv_path.write_bytes(b'id,text\n1,"hello\nworld"\n2,ok\n')
 
         frame = ar.read_csv(csv_path)
         df = ar.to_pandas(frame)
@@ -535,59 +535,68 @@ class TestScanCsv:
 
         assert list(schema.keys()) == list(frame.columns)
 
-    def test_scan_csv_non_utf8_multiline_boundary(self, tmp_path):
-        """scan_csv must not split a quoted multiline record at the sample boundary.
 
-        Previously the sampling path iterated raw physical lines, which could
-        cut through a quoted field that contained an embedded newline. The result
-        was an invalid partial CSV fed to scan_schema, causing either a parse
-        error or wrong type inference. With record-aware sampling (csv.reader)
-        the boundary always falls between complete records.
-        """
-        csv_file = tmp_path / "test_multiline_boundary.csv"
+# --- Issue #115: quoted multiline round-trip across line endings ---
 
-        # Build ~10 000 rows so the multiline record sits right at the limit.
-        content_lines = ["id,text"]
-        for i in range(1, 9999):
-            content_lines.append(f"{i},value")
 
-        # Row 9999 — a quoted field containing embedded newlines and a
-        # latin-1 character (é). This record straddles the old line-count
-        # boundary and would have been split by the previous implementation.
-        content_lines.append('9999,"multiline\nrecord\ncafé"')
-        content_lines.append("10000,end")
+def test_quoted_field_with_embedded_lf(tmp_path):
+    """LF inside quotes must be preserved as field content."""
+    csv_file = tmp_path / "test.csv"
+    csv_file.write_bytes(b'name,note\nAlice,"line1\nline2"\n')
+    df = ar.to_pandas(ar.read_csv(str(csv_file)))
+    assert len(df) == 1
+    assert df["note"][0] == "line1\nline2"
 
-        csv_content = "\n".join(content_lines)
 
-        # Write as latin-1 so the non-UTF-8 transcode path is exercised.
-        csv_file.write_bytes(csv_content.encode("latin-1"))
+def test_quoted_field_with_embedded_crlf(tmp_path):
+    """CRLF inside quotes must be preserved, not treated as row delimiter."""
+    csv_file = tmp_path / "test.csv"
+    csv_file.write_bytes(b'name,note\r\nAlice,"line1\r\nline2"\r\n')
+    df = ar.to_pandas(ar.read_csv(str(csv_file)))
+    assert len(df) == 1
+    assert df["note"][0] == "line1\r\nline2"
 
-        schema = ar.scan_csv(str(csv_file), encoding="latin-1")
-        assert schema == {"id": "int64", "text": "string"}
 
-    def test_scan_csv_type_evidence_after_limit(self, tmp_path):
-        """Type evidence that appears after the sample window must not affect inference.
+def test_quoted_field_with_embedded_cr(tmp_path):
+    """CR-only inside quotes must be preserved as field content."""
+    csv_file = tmp_path / "test.csv"
+    csv_file.write_bytes(b'name,note\nAlice,"line1\rline2"\n')
+    df = ar.to_pandas(ar.read_csv(str(csv_file)))
+    assert len(df) == 1
+    assert df["note"][0] == "line1\rline2"
 
-        scan_csv is documented to infer types from a leading sample. A float
-        value that appears only beyond row 10 000 should not change the inferred
-        type of a column that looks like int64 within the sample. This test pins
-        that contract so future changes to the sample size don't silently break
-        the documented behaviour.
-        """
-        csv_file = tmp_path / "test_type_evidence.csv"
 
-        content_lines = ["id,value"]
-        for i in range(1, 10005):
-            content_lines.append(f"{i},100")
+def test_row_split_crlf_outside_quotes(tmp_path):
+    """CRLF outside quotes must correctly split into separate rows."""
+    csv_file = tmp_path / "test.csv"
+    csv_file.write_bytes(b"a,b\r\n1,2\r\n3,4\r\n")
+    df = ar.to_pandas(ar.read_csv(str(csv_file)))
+    assert len(df) == 2
+    assert list(df["a"]) == [1, 3]
 
-        # Row 10 006 — float evidence that falls outside the 10 000-row sample.
-        content_lines.append("10006,3.14")
 
-        csv_content = "\n".join(content_lines)
+def test_scan_csv_non_utf8_multiline_boundary(tmp_path):
+    """scan_csv must not split a quoted multiline record at the sample boundary."""
+    csv_file = tmp_path / "test_multiline_boundary.csv"
+    content_lines = ["id,text"]
+    for i in range(1, 9999):
+        content_lines.append(f"{i},value")
+    content_lines.append('9999,"multiline\nrecord\ncafé"')
+    content_lines.append("10000,end")
+    csv_content = "\n".join(content_lines)
+    csv_file.write_bytes(csv_content.encode("latin-1"))
+    schema = ar.scan_csv(str(csv_file), encoding="latin-1")
+    assert schema == {"id": "int64", "text": "string"}
 
-        # latin-1 encoding so the transcode + sampling path is exercised.
-        csv_file.write_bytes(csv_content.encode("latin-1"))
 
-        schema = ar.scan_csv(str(csv_file), encoding="latin-1")
-        # The float is outside the sample; 'value' must be inferred as int64.
-        assert schema["value"] == "int64"
+def test_scan_csv_type_evidence_after_limit(tmp_path):
+    """Type evidence after sample window must not affect inference."""
+    csv_file = tmp_path / "test_type_evidence.csv"
+    content_lines = ["id,value"]
+    for i in range(1, 10005):
+        content_lines.append(f"{i},100")
+    content_lines.append("10006,3.14")
+    csv_content = "\n".join(content_lines)
+    csv_file.write_bytes(csv_content.encode("latin-1"))
+    schema = ar.scan_csv(str(csv_file), encoding="latin-1")
+    assert schema["value"] == "int64"
