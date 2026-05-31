@@ -765,6 +765,21 @@ class TestDropDuplicates:
         res_subset = ar.to_pandas(ar.drop_duplicates(frame, subset=["val1"]))
         assert len(res_subset) == 2
 
+    def test_drop_duplicates_zero_col_subset_none_preserves_rows(self):
+        frame = ar.from_pandas(pd.DataFrame(index=range(3)))
+        result = ar.drop_duplicates(frame)
+        assert result.shape == (3, 0)
+
+    def test_drop_duplicates_zero_col_empty_subset_raises(self):
+        frame = ar.from_pandas(pd.DataFrame(index=range(3)))
+        with pytest.raises(ValueError, match="subset cannot be empty"):
+            ar.drop_duplicates(frame, subset=[])
+
+    def test_drop_duplicates_zero_col_missing_column_raises(self):
+        frame = ar.from_pandas(pd.DataFrame(index=range(3)))
+        with pytest.raises(KeyError):
+            ar.drop_duplicates(frame, subset=["missing"])
+
 
 class TestDropColumns:
     def test_drop_columns_removes_requested_columns_and_preserves_order(self):
