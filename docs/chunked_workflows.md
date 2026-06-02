@@ -42,30 +42,44 @@ This page focuses on `read_csv_chunked`.
 arnio.read_csv_chunked(
     path,
     *,
-    chunk_size=10_000,
+    chunksize=10_000,
     delimiter=",",
     has_header=True,
     usecols=None,
+    dtype=None,
+    nrows=None,
+    skip_rows=0,
+    trim_headers=False,
+    decimal_separator=".",
+    thousands_separator=None,
+    null_values=None,
+    mode="default",
     encoding="utf-8",
     on_bad_lines="error",
-    encoding_errors="strict",
 )
 ```
 
 Returns a **lazy iterator** of `ArFrame` objects.  Each yielded frame contains at most
-`chunk_size` rows.  The header is consumed once; every chunk shares the same column names
+`chunksize` rows.  The header is consumed once; every chunk shares the same column names
 and inferred types.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `path` | `str \| os.PathLike` | — | Path to the CSV file. |
-| `chunk_size` | `int` | `10_000` | Maximum rows per yielded `ArFrame`. The last chunk may be smaller. |
+| `chunksize` | `int` | `10_000` | Maximum rows per yielded `ArFrame`. The last chunk may be smaller. |
 | `delimiter` | `str` | `","` | Column delimiter. |
 | `has_header` | `bool` | `True` | Whether the first row is a header. |
 | `usecols` | `list[str] \| None` | `None` | Subset of columns to load. |
-| `encoding` | `str` | `"utf-8"` | File encoding. |
-| `on_bad_lines` | `"error" \| "warn" \| "skip"` | `"error"` | Behaviour when a malformed line is encountered. |
-| `encoding_errors` | `"strict" \| "replace" \| "ignore"` | `"strict"` | Behaviour on un-decodable bytes. |
+| `dtype` | `dict[str, str] \| None` | `None` | Force specific types for named columns instead of inferring them (e.g. `{"id": "string"}`). |
+| `nrows` | `int \| None` | `None` | Stop after reading this many rows in total across all chunks. `None` reads to end-of-file. |
+| `skip_rows` | `int` | `0` | Number of rows to skip at the top of the file before the header. |
+| `trim_headers` | `bool` | `False` | Strip leading and trailing whitespace from column header names. |
+| `decimal_separator` | `str` | `"."` | Decimal point character. Use `","` for European-style CSVs. |
+| `thousands_separator` | `str \| None` | `None` | Thousands grouping character (e.g. `","`). Stripped before numeric parsing. |
+| `null_values` | `list[str] \| None` | `None` | Additional strings to treat as null (e.g. `["N/A", "–", "none"]`). Always combined with the built-in set. |
+| `mode` | `str` | `"default"` | Parsing mode. `"default"` follows `on_bad_lines`; `"strict"` raises on the first malformed line regardless of `on_bad_lines`. |
+| `encoding` | `str` | `"utf-8"` | File encoding. Non-UTF-8 input is transcoded before the C++ parser runs. |
+| `on_bad_lines` | `"error" \| "warn" \| "skip"` | `"error"` | Behaviour when a malformed line is encountered. Ignored when `mode="strict"`. |
 
 The iterator is consumed once; re-iteration requires a new call to `read_csv_chunked`.
 
@@ -80,7 +94,7 @@ Every `ValidationIssue` returned by `ar.validate()` carries a `.row_index` field
 File row 1   → chunk 0, row_index 1
 File row 2   → chunk 0, row_index 2
 ...
-File row 10000  → chunk 0, row_index 10000   (chunk_size=10_000)
+File row 10000  → chunk 0, row_index 10000   (chunksize=10_000)
 File row 10001  → chunk 1, row_index 1       ← resets to 1
 File row 10002  → chunk 1, row_index 2
 ```
@@ -88,7 +102,7 @@ File row 10002  → chunk 1, row_index 2
 To convert a local `row_index` to its global file row number use:
 
 ```python
-global_row = chunk_number * chunk_size + issue.row_index
+global_row = chunk_number * chunksize + issue.row_index
 ```
 
 `chunk_number` is 0-based (the first chunk is chunk 0).  Example A below demonstrates this
@@ -140,7 +154,7 @@ per-chunk `DataQualityReport` objects, and combine the counts you care about:
 total_rows = 0
 total_nulls = 0
 
-for chunk in ar.read_csv_chunked("big.csv", chunk_size=50_000):
+for chunk in ar.read_csv_chunked("big.csv", chunksize=50_000):
     report = ar.profile(chunk)
     total_rows += report.row_count
     for col_profile in report.columns.values():
@@ -176,7 +190,7 @@ schema = ar.Schema(
     }
 )
 
-CHUNK_SIZE = 50_000
+CHUNKSIZE = 50_000
 all_issues = []   # list of dicts — kept small because only issues are stored
 total_rows = 0
 
@@ -184,9 +198,8 @@ total_rows = 0
 for chunk_number, chunk in enumerate(
     ar.read_csv_chunked(
         "users_large.csv",
-        chunk_size=CHUNK_SIZE,
+        chunksize=CHUNKSIZE,
         on_bad_lines="warn",
-        encoding_errors="replace",
     )
 ):
     result = ar.validate(chunk, schema)
@@ -195,7 +208,7 @@ for chunk_number, chunk in enumerate(
     for issue in result.issues:
         # Convert the local (per-chunk) row_index to a global file row number.
         # row_index is 1-based; chunk_number is 0-based.
-        global_row = chunk_number * CHUNK_SIZE + issue.row_index
+        global_row = chunk_number * CHUNKSIZE + issue.row_index
 
         all_issues.append(
             {
@@ -266,7 +279,7 @@ import arnio as ar
 
 INPUT_PATH  = "orders_raw.csv"
 OUTPUT_PATH = "orders_clean.csv"
-CHUNK_SIZE  = 25_000
+CHUNKSIZE   = 25_000
 
 # ── Pipeline steps ────────────────────────────────────────────────────────────
 # All steps below are row-safe: each row is transformed independently.
@@ -291,7 +304,7 @@ with open(OUTPUT_PATH, "w", newline="", encoding="utf-8") as out_file:
 
     for chunk in ar.read_csv_chunked(
         INPUT_PATH,
-        chunk_size=CHUNK_SIZE,
+        chunksize=CHUNKSIZE,
         on_bad_lines="warn",
     ):
         rows_in += len(chunk)
@@ -383,7 +396,7 @@ chunks if you need file-level values.
 
 When you log or store validation issues from a chunked run, always record both the `chunk_number`
 and the `global_row` (computed as shown in Example A).  This makes issues traceable back to the
-original file regardless of `chunk_size`.
+original file regardless of `chunksize`.
 
 **Recommended log schema for CI:**
 
@@ -391,18 +404,18 @@ original file regardless of `chunk_size`.
 |---|---|---|
 | `run_id` | string | Unique identifier for this validation run (timestamp, git SHA, etc.). |
 | `source_file` | string | Path or URI of the input CSV. |
-| `chunk_size` | int | `chunk_size` used in this run. |
+| `chunksize` | int | `chunksize` used in this run. |
 | `chunk_number` | int | 0-based chunk index. |
 | `local_row` | int | `issue.row_index` — 1-based, local to the chunk. |
-| `global_row` | int | `chunk_number * chunk_size + local_row`. |
+| `global_row` | int | `chunk_number * chunksize + local_row`. |
 | `column` | string | Column name where the issue was detected. |
 | `rule` | string | Rule name (e.g. `"email_format"`, `"max"`). |
 | `message` | string | Human-readable description. |
 | `value` | any | The offending cell value. |
 
-Storing `chunk_size` alongside `global_row` lets you re-derive `local_row` later
-(`local_row = global_row - chunk_number * chunk_size`) and also means the log remains
-interpretable if `chunk_size` changes between runs.
+Storing `chunksize` alongside `global_row` lets you re-derive `local_row` later
+(`local_row = global_row - chunk_number * chunksize`) and also means the log remains
+interpretable if `chunksize` changes between runs.
 
 **Quick CI gate pattern:**
 
@@ -431,5 +444,3 @@ print("Validation passed.")
 ```
 
 ---
-
-*Fixes #2271.*
