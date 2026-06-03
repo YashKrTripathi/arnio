@@ -1337,7 +1337,7 @@ def test_profile_exclude_columns_default_behavior(sample_csv):
 def test_profile_exclude_columns_valid_exclusion(tmp_path):
     path = tmp_path / "profile_exclude.csv"
     path.write_text(
-        "id,status,raw_payload\n" "1,active,{a}\n" "2,inactive,{b}\n" "3,active,{c}\n",
+        "id,status,raw_payload\n1,active,{a}\n2,inactive,{b}\n3,active,{c}\n",
         encoding="utf-8",
     )
 
@@ -1428,7 +1428,7 @@ def test_profile_exclude_columns_accepts_empty_list(sample_csv):
 def test_profile_exclude_columns_scopes_report_metrics_and_suggestions(tmp_path):
     path = tmp_path / "profile_scope.csv"
     path.write_text(
-        "id,score\n" "1,10\n" "1,10\n" "2,20\n",
+        "id,score\n1,10\n1,10\n2,20\n",
         encoding="utf-8",
     )
 
@@ -3997,16 +3997,12 @@ def test_data_quality_report_invariant_invalid_metrics():
 
 
 def test_cleaning_suggestion_is_exported():
-    assert hasattr(
-        ar, "CleaningSuggestion"
-    ), "CleaningSuggestion is missing from arnio.__init__ file"
+    missing_message = "CleaningSuggestion is missing from arnio.__init__ file"
+    mismatch_message = "Top-level CleaningSuggestion does not match the internal type"
 
-    assert (
-        ar.CleaningSuggestion is CleaningSuggestion
-    ), "Top-level CleaningSuggestion does not match the internal type"
-    assert (
-        ar.CleaningSuggestion is CleaningSuggestion
-    ), "Top-level CleaningSuggestion does not match the internal type"
+    assert hasattr(ar, "CleaningSuggestion"), missing_message
+    assert ar.CleaningSuggestion is CleaningSuggestion, mismatch_message
+    assert ar.CleaningSuggestion is CleaningSuggestion, mismatch_message
 
 
 # ── CleanStepRecord and CleanExplanation validation tests (Fixes #1687) ──────
@@ -4304,12 +4300,10 @@ def test_auto_clean_rejects_invalid_string_mode():
     with pytest.raises(ValueError, match="mode must be 'safe' or 'strict'"):
         ar.auto_clean(frame, mode="SAFE")
 
-def test_quality_helpers_reject_invalid_frame():
-    import pytest
-    import arnio as ar
-    import pandas as pd
-    for obj in [object(), None, 123, pd.DataFrame()]:
-        with pytest.raises(TypeError, match=".*must be an ArFrame.*"):
-            ar.profile(obj)
-        with pytest.raises(TypeError, match=".*must be an ArFrame.*"):
-            ar.auto_clean(obj)
+
+@pytest.mark.parametrize("obj", [object(), None, 123, pd.DataFrame()])
+def test_quality_helpers_reject_invalid_frame(obj):
+    with pytest.raises(TypeError, match=".*must be an ArFrame.*"):
+        ar.profile(obj)
+    with pytest.raises(TypeError, match=".*must be an ArFrame.*"):
+        ar.auto_clean(obj)

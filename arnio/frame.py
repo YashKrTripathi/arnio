@@ -17,6 +17,7 @@ _VALID_DTYPES: frozenset[str] = frozenset(
     {"int64", "float64", "string", "bool", "null"}
 )
 
+
 def _validate_arframe(frame: Any, argument_name: str = "frame") -> None:
     if not isinstance(frame, ArFrame):
         raise TypeError(f"{argument_name} must be an ArFrame")
@@ -624,7 +625,7 @@ class ArFrame:
         missing = [col for col in unique_cols if col not in self.columns]
         if missing:
             raise ValueError(
-                f"Unknown column(s): {missing}. " f"Available columns: {self.columns}"
+                f"Unknown column(s): {missing}. Available columns: {self.columns}"
             )
 
         # Empty input — return unchanged copy
@@ -968,8 +969,7 @@ class ArFrame:
         num_rows, num_cols = self.shape
         if num_rows > 0 and num_cols == 0:
             return (
-                f"ArFrame preview: {num_rows} rows x 0 columns "
-                "(no columns to display)"
+                f"ArFrame preview: {num_rows} rows x 0 columns (no columns to display)"
             )
 
         if num_rows == 0:
@@ -1089,9 +1089,7 @@ class ArFrame:
             rows_html += f"<tr>{cells}</tr>"
 
         tbody = f"<tbody>{rows_html}</tbody>"
-        table = (
-            "<table style='border-collapse:collapse;'>" f"{header}{tbody}" "</table>"
-        )
+        table = f"<table style='border-collapse:collapse;'>{header}{tbody}</table>"
 
         # ── truncation notice ─────────────────────────────────────────────
         notice = ""
