@@ -4303,3 +4303,13 @@ def test_auto_clean_rejects_invalid_string_mode():
     frame = ar.from_dict({"name": [" Alice "]})
     with pytest.raises(ValueError, match="mode must be 'safe' or 'strict'"):
         ar.auto_clean(frame, mode="SAFE")
+
+def test_quality_helpers_reject_invalid_frame():
+    import pytest
+    import arnio as ar
+    import pandas as pd
+    for obj in [object(), None, 123, pd.DataFrame()]:
+        with pytest.raises(TypeError, match=".*must be an ArFrame.*"):
+            ar.profile(obj)
+        with pytest.raises(TypeError, match=".*must be an ArFrame.*"):
+            ar.auto_clean(obj)

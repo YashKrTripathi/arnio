@@ -8,6 +8,7 @@ from __future__ import annotations
 import copy
 import json
 import math
+from typing import Any
 
 from ._core import _Frame
 
@@ -15,6 +16,10 @@ from ._core import _Frame
 _VALID_DTYPES: frozenset[str] = frozenset(
     {"int64", "float64", "string", "bool", "null"}
 )
+
+def _validate_arframe(frame: Any, argument_name: str = "frame") -> None:
+    if not isinstance(frame, ArFrame):
+        raise TypeError(f"{argument_name} must be an ArFrame")
 
 
 class StatsDict(dict):
